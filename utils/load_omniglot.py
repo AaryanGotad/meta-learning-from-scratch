@@ -3,7 +3,6 @@ from torch.utils.data import Dataset
 import numpy as np
 from PIL import Image
 import os
-from pathlib import Path
 import random
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
@@ -35,13 +34,16 @@ class OmniglotDataset(Dataset):
         
         print("Loading character paths...")
         # Get all character folders
-        data_path = Path(data_path) # converting to path object
-        alphabets = [p for p in data_path.iterdir() if p.is_dir()]
-        for alphabet_path in tqdm(alphabets, desc="Processing alphabets"):
-            characters = [p for p in alphabet_path.iterdir()]
-            for char_path in characters:
-                self.character_paths.append(char_path)
-                       
+        alphabets = os.listdir(data_path)
+        for alphabet in tqdm(alphabets, desc="Processing alphabets"):
+            alphabet_path = os.path.join(data_path, alphabet)
+            if os.path.isdir(alphabet_path):
+                characters = os.listdir(alphabet_path)
+                for char in characters:
+                    char_path = os.path.join(alphabet_path, char)
+                    if os.path.isdir(char_path):
+                        self.character_paths.append(char_path)
+        
         print(f"Found {len(self.character_paths)} character classes")
     
     def __len__(self):
@@ -71,12 +73,12 @@ class OmniglotDataset(Dataset):
                 - int: The index of the character class.
         """
         char_path = self.character_paths[idx]
-        images = [f.name for f in char_path.iterdir() if f.suffix == '.png']
+        images = [f for f in os.listdir(char_path) if f.endswith('.png')]
         
         # Load all images for this character
         image_tensors = []
         for img_name in images:
-            img_path = char_path / img_name # using the / operator
+            img_path = os.path.join(char_path, img_name)
             img = Image.open(img_path).convert('L')
             img = img.resize((105, 105))
             img_tensor = torch.tensor(np.array(img), dtype=torch.float32) / 255.0
@@ -97,12 +99,11 @@ def _load_character_data(char_path):
     Returns:
         tuple: (character_tensor, char_path) or None if no images found
     """
-    char_path = Path(char_path)
-    image_files = sorted([f.name for f in char_path.iterdir() if f.suffix == '.png'])
+    image_files = sorted([f for f in os.listdir(char_path) if f.endswith('.png')])
     image_tensors = []
     
     for img_name in image_files:
-        img_path = char_path / img_name
+        img_path = os.path.join(char_path, img_name)
         img = Image.open(img_path).convert('L')
         img = img.resize((105, 105))
         img_tensor = torch.tensor(np.array(img), dtype=torch.float32) / 255.0
@@ -147,15 +148,20 @@ class PrefetchedOmniglotDataset(Dataset):
         print("   This should take 5-15 seconds with parallel loading!")
         
         # Get all character folders
-        data_path = Path(data_path) # converting to Path objects
-        alphabets = sorted([p for p in data_path.iterdir() if p.is_dir()])
+        alphabets = sorted(os.listdir(data_path))
         all_char_paths = []
         
         # Collect all character paths
-        for alphabet_path in alphabets:
-            characters = sorted([p for p in alphabet_path.iterdir() if p.is_dir()])
-            for char_path in characters:
-                all_char_paths.append(char_path)
+        for alphabet in alphabets:
+            alphabet_path = os.path.join(data_path, alphabet)
+            if not os.path.isdir(alphabet_path):
+                continue
+                
+            characters = sorted(os.listdir(alphabet_path))
+            for char in characters:
+                char_path = os.path.join(alphabet_path, char)
+                if os.path.isdir(char_path):
+                    all_char_paths.append(char_path)
         
         total_chars = len(all_char_paths)
         print(f"   Found {total_chars} character classes to load")
